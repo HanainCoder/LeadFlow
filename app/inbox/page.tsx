@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Search,
@@ -37,9 +37,10 @@ interface Conversation {
   updatedAt: string;
 }
 
-export default function InboxPage() {
+function InboxContent() {
   const searchParams = useSearchParams();
   const phoneParam = searchParams.get("phone");
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
 
@@ -69,30 +70,30 @@ export default function InboxPage() {
       setConversations(data);
 
       if (data.length > 0) {
-  setSelected((current) => {
-    if (phoneParam) {
-      const requestedConversation = data.find(
-        (conversation) => conversation.phone === phoneParam
-      );
+        setSelected((current) => {
+          if (phoneParam) {
+            const requestedConversation = data.find(
+              (conversation) => conversation.phone === phoneParam
+            );
 
-      if (requestedConversation) {
-        return requestedConversation;
+            if (requestedConversation) {
+              return requestedConversation;
+            }
+          }
+
+          if (!current) {
+            return data[0];
+          }
+
+          const updatedSelected = data.find(
+            (conversation) => conversation._id === current._id
+          );
+
+          return updatedSelected || data[0];
+        });
+      } else {
+        setSelected(null);
       }
-    }
-
-    if (!current) {
-      return data[0];
-    }
-
-    const updatedSelected = data.find(
-      (conversation) => conversation._id === current._id
-    );
-
-    return updatedSelected || data[0];
-  });
-} else {
-  setSelected(null);
-}
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
     } finally {
@@ -131,103 +132,102 @@ export default function InboxPage() {
   }, [conversations, search]);
 
   async function handleSendMessage() {
-  const trimmedMessage = message.trim();
+    const trimmedMessage = message.trim();
 
-  if (!trimmedMessage || !selected || sending) {
-    return;
+    if (!trimmedMessage || !selected || sending) {
+      return;
+    }
+
+    try {
+      setSending(true);
+
+      const response = await fetch(
+        `/api/conversations/${encodeURIComponent(selected.phone)}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: trimmedMessage,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send message");
+      }
+
+      setMessage("");
+
+      await fetchConversations(true);
+    } catch (error) {
+      console.error("Business reply error:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to send message."
+      );
+    } finally {
+      setSending(false);
+    }
   }
 
-  try {
-    setSending(true);
+  async function handleSimulateCustomerMessage() {
+    const trimmedMessage = message.trim();
 
-    const response = await fetch(
-      `/api/conversations/${encodeURIComponent(selected.phone)}/messages`,
-      {
+    if (!trimmedMessage || !selected || sending) {
+      return;
+    }
+
+    const lead = selected.leadId;
+
+    if (!lead) {
+      alert("This conversation is not connected to a lead.");
+      return;
+    }
+
+    try {
+      setSending(true);
+
+      const response = await fetch("/api/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          name: lead.name,
+          phone: selected.phone,
           message: trimmedMessage,
         }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Failed to simulate customer message"
+        );
       }
-    );
 
-    const data = await response.json();
+      setMessage("");
 
-    if (!response.ok) {
-      throw new Error(
-        data.error || "Failed to send message"
+      await fetchConversations(true);
+    } catch (error) {
+      console.error("Customer simulation error:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to simulate customer message."
       );
+    } finally {
+      setSending(false);
     }
-
-    setMessage("");
-
-    await fetchConversations(true);
-  } catch (error) {
-    console.error("Business reply error:", error);
-
-    alert(
-      error instanceof Error
-        ? error.message
-        : "Failed to send message."
-    );
-  } finally {
-    setSending(false);
   }
-}
-async function handleSimulateCustomerMessage() {
-  const trimmedMessage = message.trim();
-
-  if (!trimmedMessage || !selected || sending) {
-    return;
-  }
-
-  const lead = selected.leadId;
-
-  if (!lead) {
-    alert("This conversation is not connected to a lead.");
-    return;
-  }
-
-  try {
-    setSending(true);
-
-    const response = await fetch("/api/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: lead.name,
-        phone: selected.phone,
-        message: trimmedMessage,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.error || "Failed to simulate customer message"
-      );
-    }
-
-    setMessage("");
-
-    await fetchConversations(true);
-  } catch (error) {
-    console.error("Customer simulation error:", error);
-
-    alert(
-      error instanceof Error
-        ? error.message
-        : "Failed to simulate customer message."
-    );
-  } finally {
-    setSending(false);
-  }
-}
 
   function handleMessageKeyDown(
     event: React.KeyboardEvent<HTMLInputElement>
@@ -402,8 +402,7 @@ async function handleSimulateCustomerMessage() {
                         </div>
 
                         <p className="mt-1 truncate text-xs text-slate-500">
-                          {lastMessage?.message ||
-                            "No messages yet"}
+                          {lastMessage?.message || "No messages yet"}
                         </p>
 
                         {lead?.tags?.length ? (
@@ -481,10 +480,7 @@ async function handleSimulateCustomerMessage() {
                     <span className="text-slate-300">•</span>
 
                     <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                      <Circle
-                        size={6}
-                        fill="currentColor"
-                      />
+                      <Circle size={6} fill="currentColor" />
                       Active
                     </span>
                   </div>
@@ -529,13 +525,7 @@ async function handleSimulateCustomerMessage() {
                         {item.message}
                       </p>
 
-                      <p
-                        className={`mt-1.5 text-[9px] ${
-                          item.sender === "customer"
-                            ? "text-slate-400"
-                            : "text-slate-400"
-                        }`}
-                      >
+                      <p className="mt-1.5 text-[9px] text-slate-400">
                         {formatTime(item.createdAt)}
                       </p>
                     </div>
@@ -604,3 +594,12 @@ function formatTime(date: string) {
     minute: "2-digit",
   });
 }
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={null}>
+      <InboxContent />
+    </Suspense>
+  );
+}
+
