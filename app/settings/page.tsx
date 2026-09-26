@@ -46,6 +46,47 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
 const [saving, setSaving] = useState(false);
 
+async function loadSettings() {
+  try {
+    setLoading(true);
+
+    const response = await fetch("/api/settings");
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to load settings");
+    }
+
+    setBusinessName(data.businessName ?? "LeadFlow");
+    setBusinessEmail(data.businessEmail ?? "hello@leadflow.com");
+    setPhone(data.phone ?? "");
+    setIndustry(data.industry ?? "Software & IT");
+    setTimezone(data.timezone ?? "Asia/Karachi");
+
+    setAutomationEnabled(data.automationEnabled ?? true);
+    setAutoCreateLeads(data.autoCreateLeads ?? true);
+    setAutoTagConversations(data.autoTagConversations ?? true);
+    setAutoResponse(data.autoResponse ?? true);
+
+    setShowPhoneNumbers(data.showPhoneNumbers ?? true);
+    setMarkAsRead(data.markAsRead ?? true);
+    setSaveHistory(data.saveHistory ?? true);
+    setSimulationMode(data.simulationMode ?? true);
+
+    setNewLeadNotification(data.newLeadNotification ?? true);
+    setAutomationNotification(data.automationNotification ?? true);
+    setConversationNotification(data.conversationNotification ?? true);
+  } catch (error) {
+    console.error("Load settings error:", error);
+  } finally {
+    setLoading(false);
+  }
+}
+
+useEffect(() => {
+  loadSettings();
+}, []);
   async function handleSave() {
   try {
     setSaving(true);
