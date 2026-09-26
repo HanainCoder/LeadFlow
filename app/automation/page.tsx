@@ -10,6 +10,7 @@ import {
   Power,
   Trash2,
   X,
+  RefreshCw,
 } from "lucide-react";
 
 interface AutomationRule {
@@ -27,24 +28,45 @@ export default function AutomationPage() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  async function fetchRules() {
+  async function fetchRules(showRefresh = false) {
     try {
+      if (showRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       const response = await fetch("/api/automation/rules");
       const data = await response.json();
 
-      if (response.ok) {
-        setRules(data);
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to fetch automation rules");
       }
+
+      setRules(data);
+      setError("");
     } catch (error) {
       console.error("Failed to fetch rules:", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to fetch automation rules"
+      );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
   useEffect(() => {
-    fetchRules();
+    const timer = window.setTimeout(() => {
+      void fetchRules();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   return (
@@ -69,14 +91,41 @@ export default function AutomationPage() {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowForm(true)}
-          className="flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
-        >
-          <Plus size={18} />
-          Create Rule
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => fetchRules(true)}
+            disabled={refreshing}
+            title="Refresh automation rules"
+            className="flex h-11 items-center justify-center gap-2 rounded-lg border bg-white px-4 text-sm text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RefreshCw
+              size={16}
+              className={refreshing ? "animate-spin" : ""}
+            />
+            Refresh
+          </button>
+
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            <Plus size={18} />
+            Create Rule
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <div className="mb-6 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{error}</span>
+          <button
+            onClick={() => setError("")}
+            aria-label="Dismiss error"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Overview */}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
@@ -125,8 +174,17 @@ export default function AutomationPage() {
 
       {/* Rules */}
       {loading ? (
-        <div className="rounded-2xl border bg-white p-10 text-center text-sm text-slate-500">
-          Loading automation rules...
+        <div className="space-y-4">
+          {[1, 2].map((item) => (
+            <div
+              key={item}
+              className="animate-pulse rounded-2xl border bg-white p-6"
+            >
+              <div className="h-5 w-48 rounded bg-slate-100" />
+              <div className="mt-4 h-4 w-full rounded bg-slate-100" />
+              <div className="mt-2 h-4 w-2/3 rounded bg-slate-100" />
+            </div>
+          ))}
         </div>
       ) : rules.length === 0 ? (
         <div className="rounded-2xl border bg-white p-10 text-center">
@@ -198,36 +256,44 @@ function RuleCard({
   onDeleted: () => void;
 }) {
   const [active, setActive] = useState(rule.active);
+  const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   async function toggleRule() {
-  const newActiveState = !active;
+    if (updating || deleting) return;
 
-  try {
-    const response = await fetch(
-      `/api/automation/rules/${rule._id}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          active: newActiveState,
-        }),
+    const newActiveState = !active;
+    setUpdating(true);
+
+    try {
+      const response = await fetch(
+        `/api/automation/rules/${rule._id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            active: newActiveState,
+          }),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to update rule.");
       }
-    );
 
-    if (!response.ok) {
-      alert("Failed to update rule.");
-      return;
+      setActive(data.rule?.active ?? newActiveState);
+    } catch (error) {
+      console.error("Toggle rule error:", error);
+      alert(
+        error instanceof Error ? error.message : "Failed to update rule."
+      );
+    } finally {
+      setUpdating(false);
     }
-
-    setActive(newActiveState);
-  } catch (error) {
-    console.error("Toggle rule error:", error);
-    alert("Failed to update rule.");
   }
-}
 
   async function deleteRule() {
     const confirmed = window.confirm(
@@ -245,15 +311,18 @@ function RuleCard({
           method: "DELETE",
         }
       );
+      const data = await response.json();
 
-      if (response.ok) {
-        onDeleted();
-      } else {
-        alert("Failed to delete rule.");
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete rule.");
       }
+
+      onDeleted();
     } catch (error) {
       console.error("Delete rule error:", error);
-      alert("Failed to delete rule.");
+      alert(
+        error instanceof Error ? error.message : "Failed to delete rule."
+      );
     } finally {
       setDeleting(false);
     }
@@ -293,18 +362,20 @@ function RuleCard({
         <div className="flex items-center gap-2">
           <button
             onClick={toggleRule}
-            className={`rounded-lg border px-3 py-2 text-xs font-medium ${
+            disabled={updating || deleting}
+            className={`rounded-lg border px-3 py-2 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
               active
                 ? "text-amber-600 hover:bg-amber-50"
                 : "text-emerald-600 hover:bg-emerald-50"
             }`}
           >
-            {active ? "Pause" : "Activate"}
+            {updating ? "Saving..." : active ? "Pause" : "Activate"}
           </button>
 
           <button
             onClick={deleteRule}
-            disabled={deleting}
+            disabled={deleting || updating}
+            title="Delete rule"
             className="rounded-lg border p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
           >
             <Trash2 size={16} />
