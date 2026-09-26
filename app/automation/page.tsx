@@ -284,7 +284,7 @@ function RuleCard({
         throw new Error(data.error || "Failed to update rule.");
       }
 
-      setActive(data.rule?.active ?? newActiveState);
+      setActive(data.active ?? newActiveState);
     } catch (error) {
       console.error("Toggle rule error:", error);
       alert(

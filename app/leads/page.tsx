@@ -13,7 +13,9 @@ import {
   X,
   Plus,
   RefreshCw,
+  MessageSquare
 } from "lucide-react";
+
 
 interface Lead {
   _id: string;
@@ -110,6 +112,37 @@ export default function LeadsPage() {
       );
     }
   }
+  async function handleOpenInbox(lead: Lead) {
+  try {
+    const response = await fetch("/api/conversations/start", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        leadId: lead._id,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to open conversation");
+    }
+
+    window.location.href = `/inbox?phone=${encodeURIComponent(
+      data.phone
+    )}`;
+  } catch (error) {
+    console.error("Open inbox error:", error);
+
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Failed to open inbox"
+    );
+  }
+}
 
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -418,6 +451,20 @@ export default function LeadsPage() {
                   {selectedLead.notes || "No notes added yet."}
                 </div>
               </section>
+              {/* Inbox Action */}
+<section className="border-t pt-5">
+  <button
+    onClick={() => handleOpenInbox(selectedLead)}
+    className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+  >
+    <MessageSquare size={16} />
+    Open Inbox
+  </button>
+
+  <p className="mt-2 text-center text-[11px] text-slate-400">
+    Open or start a conversation with this lead.
+  </p>
+</section>
 
               {/* Metadata */}
               <section className="border-t pt-5">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Send,
@@ -37,6 +38,8 @@ interface Conversation {
 }
 
 export default function InboxPage() {
+  const searchParams = useSearchParams();
+  const phoneParam = searchParams.get("phone");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
 
@@ -66,20 +69,30 @@ export default function InboxPage() {
       setConversations(data);
 
       if (data.length > 0) {
-        setSelected((current) => {
-          if (!current) {
-            return data[0];
-          }
+  setSelected((current) => {
+    if (phoneParam) {
+      const requestedConversation = data.find(
+        (conversation) => conversation.phone === phoneParam
+      );
 
-          const updatedSelected = data.find(
-            (conversation) => conversation._id === current._id
-          );
-
-          return updatedSelected || data[0];
-        });
-      } else {
-        setSelected(null);
+      if (requestedConversation) {
+        return requestedConversation;
       }
+    }
+
+    if (!current) {
+      return data[0];
+    }
+
+    const updatedSelected = data.find(
+      (conversation) => conversation._id === current._id
+    );
+
+    return updatedSelected || data[0];
+  });
+} else {
+  setSelected(null);
+}
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
     } finally {
@@ -90,7 +103,7 @@ export default function InboxPage() {
 
   useEffect(() => {
     fetchConversations();
-  }, []);
+  }, [phoneParam]);
 
   const filteredConversations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -118,55 +131,103 @@ export default function InboxPage() {
   }, [conversations, search]);
 
   async function handleSendMessage() {
-    const trimmedMessage = message.trim();
+  const trimmedMessage = message.trim();
 
-    if (!trimmedMessage || !selected || sending) {
-      return;
-    }
+  if (!trimmedMessage || !selected || sending) {
+    return;
+  }
 
-    const lead = selected.leadId;
+  try {
+    setSending(true);
 
-    if (!lead) {
-      alert("This conversation is not connected to a lead.");
-      return;
-    }
-
-    try {
-      setSending(true);
-
-      const response = await fetch("/api/messages", {
+    const response = await fetch(
+      `/api/conversations/${encodeURIComponent(selected.phone)}/messages`,
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: lead.name,
-          phone: selected.phone,
           message: trimmedMessage,
         }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send message");
       }
+    );
 
-      setMessage("");
+    const data = await response.json();
 
-      await fetchConversations(true);
-    } catch (error) {
-      console.error("Send message error:", error);
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Failed to send message."
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Failed to send message"
       );
-    } finally {
-      setSending(false);
     }
+
+    setMessage("");
+
+    await fetchConversations(true);
+  } catch (error) {
+    console.error("Business reply error:", error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Failed to send message."
+    );
+  } finally {
+    setSending(false);
   }
+}
+async function handleSimulateCustomerMessage() {
+  const trimmedMessage = message.trim();
+
+  if (!trimmedMessage || !selected || sending) {
+    return;
+  }
+
+  const lead = selected.leadId;
+
+  if (!lead) {
+    alert("This conversation is not connected to a lead.");
+    return;
+  }
+
+  try {
+    setSending(true);
+
+    const response = await fetch("/api/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: lead.name,
+        phone: selected.phone,
+        message: trimmedMessage,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Failed to simulate customer message"
+      );
+    }
+
+    setMessage("");
+
+    await fetchConversations(true);
+  } catch (error) {
+    console.error("Customer simulation error:", error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Failed to simulate customer message."
+    );
+  } finally {
+    setSending(false);
+  }
+}
 
   function handleMessageKeyDown(
     event: React.KeyboardEvent<HTMLInputElement>
