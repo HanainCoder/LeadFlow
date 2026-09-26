@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bell,
   Building2,
@@ -43,15 +43,64 @@ export default function SettingsPage() {
     useState(true);
 
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+const [saving, setSaving] = useState(false);
 
-  function handleSave() {
+  async function handleSave() {
+  try {
+    setSaving(true);
+
+    const response = await fetch("/api/settings", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        businessName,
+        businessEmail,
+        phone,
+        industry,
+        timezone,
+
+        automationEnabled,
+        autoCreateLeads,
+        autoTagConversations,
+        autoResponse,
+
+        showPhoneNumbers,
+        markAsRead,
+        saveHistory,
+        simulationMode,
+
+        newLeadNotification,
+        automationNotification,
+        conversationNotification,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to save settings");
+    }
+
     setSaved(true);
 
     setTimeout(() => {
       setSaved(false);
     }, 2500);
-  }
+  } catch (error) {
+    console.error("Save settings error:", error);
 
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Failed to save settings."
+    );
+  } finally {
+    setSaving(false);
+  }
+}
   function handleDeleteData() {
     const confirmed = window.confirm(
       "Are you sure you want to delete all test data? This action cannot be undone."
